@@ -93,6 +93,34 @@
     </div>
   </div>
 
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { 
+    getFirestore, 
+    collection, 
+    addDoc, 
+    onSnapshot, 
+    query, 
+    orderBy 
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAkM-kBPSeuABLv_UeZnz2YLrn0pqbJw4M",
+    authDomain: "live-comments-60609.firebaseapp.com",
+    projectId: "live-comments-60609",
+    storageBucket: "live-comments-60609.firebasestorage.app",
+    messagingSenderId: "104358541443",
+    appId: "1:104358541443:web:f49a3fb3a23bb3dbaf03b6"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // ส่งไปใช้ใน app.js
+  window.db = db;
+  window.fb = { collection, addDoc, onSnapshot, query, orderBy };
+</script>
+
   <script src="app.js"></script>
 </body>
 </html>
