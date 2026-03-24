@@ -22,7 +22,6 @@ const CONFIG = {
 // ─── State ────────────────────────────────────────────────────
 let myName     = '';
 let myColor    = '';
-let channel    = null;
 let isScrolled = false;
 let viewerCount = 1;
 
@@ -104,23 +103,24 @@ function renderSystem(text) {
 }
 
 // ─── Send Comment ─────────────────────────────────────────────
-function sendComment() {
+async function sendComment() {
   const text = commentInput.value.trim();
   if (!text || text.length > 200) return;
 
   const payload = {
-    type:  'comment',
-    name:  myName,
+    name: myName,
     text,
     color: myColor,
-    time:  Date.now(),
+    time: Date.now(),
   };
 
-  // Show locally as self
   renderComment({ ...payload, isSelf: true });
 
-  // Broadcast to other tabs on same device
-  if (channel) channel.postMessage(payload);
+  // 🔥 ส่งขึ้น Firestore
+  await window.fb.addDoc(
+    window.fb.collection(window.db, "comments"),
+    payload
+  );
 
   commentInput.value = '';
   updateCharCount();
@@ -128,44 +128,28 @@ function sendComment() {
   triggerEmojiBurst();
 }
 
-// ─── BroadcastChannel ─────────────────────────────────────────
-function initChannel() {
-  if (!window.BroadcastChannel) {
-    renderSystem('⚠️ เบราว์เซอร์นี้ไม่รองรับ BroadcastChannel');
-    return;
-  }
+function listenComments() {
+  const q = window.fb.query(
+    window.fb.collection(window.db, "comments"),
+    window.fb.orderBy("time", "asc")
+  );
 
-  channel = new BroadcastChannel(CONFIG.channelName);
+  window.fb.onSnapshot(q, (snapshot) => {
+    snapshot.docChanges().forEach((change) => {
+      if (change.type === "added") {
+        const data = change.doc.data();
 
-  channel.onmessage = (e) => {
-    const msg = e.data;
-    if (!msg) return;
+        // กัน comment ตัวเองซ้ำ
+        if (data.name === myName && data.time > Date.now() - 2000) return;
 
-    if (msg.type === 'comment') {
-      // Show comment from another tab (never isSelf)
-      renderComment({ name: msg.name, text: msg.text, color: msg.color, time: msg.time });
-    }
-
-    if (msg.type === 'join') {
-      viewerCount++;
-      viewerEl.textContent = viewerCount;
-      renderSystem(`${msg.name} เข้าร่วมการสนทนา 👋`);
-    }
-
-    if (msg.type === 'leave') {
-      viewerCount = Math.max(1, viewerCount - 1);
-      viewerEl.textContent = viewerCount;
-      renderSystem(`${msg.name} ออกจากการสนทนา`);
-    }
-  };
-
-  // Tell other tabs someone joined
-  channel.postMessage({ type: 'join', name: myName });
-
-  // Tell other tabs when this tab closes
-  window.addEventListener('beforeunload', () => {
-    channel.postMessage({ type: 'leave', name: myName });
-    channel.close();
+        renderComment({
+          name: data.name,
+          text: data.text,
+          color: data.color,
+          time: data.time
+        });
+      }
+    });
   });
 }
 
@@ -224,7 +208,7 @@ function joinLive() {
   renderSystem(`คุณ (${myName}) เข้าร่วมการสนทนาแล้ว 👋`);
   renderSystem('💡 เปิดแท็บใหม่ในหน้านี้เพื่อเพิ่มผู้ใช้งาน');
 
-  initChannel();
+  listenComments();
 }
 
 joinBtn.addEventListener('click', joinLive);
