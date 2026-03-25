@@ -80,7 +80,8 @@ function scrollToBottom(force = false) {
 // ─── Render ───────────────────────────────────────────────────
 function renderComment({ id, name, text, isSelf = false, color, time, reactions = {} }) {
   const card = document.createElement('div');
-  card.className = 'comment-card' + (isSelf ? ' is-self' : '');
+card.className = 'comment-card' + (isSelf ? ' is-self' : '');
+card.id = id;
 
   const avatarColor = color || getAvatarColor(name);
   const initial = getInitial(name);
@@ -152,21 +153,44 @@ function listenComments() {
   );
 
   unsubscribeComments = window.fb.onSnapshot(q, (snapshot) => {
-    feed.innerHTML = '<div class="feed-spacer-top"></div><div class="feed-spacer-bottom"></div>';
+    snapshot.docChanges().forEach(change => {
+      const data = change.doc.data();
+      const id = change.doc.id;
 
-    snapshot.forEach(doc => {
-      const data = doc.data();
+      if (change.type === "added") {
+        renderComment({
+          id,
+          name: data.name,
+          text: data.text,
+          color: data.color,
+          time: data.time,
+          reactions: data.reactions || {}
+        });
+      }
 
-      renderComment({
-        id: doc.id,
-        name: data.name,
-        text: data.text,
-        color: data.color,
-        time: data.time,
-        reactions: data.reactions || {}
-      });
+      if (change.type === "modified") {
+        updateComment(id, data);
+      }
+
+      if (change.type === "removed") {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+      }
     });
   });
+}
+
+function updateComment(id, data) {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  const reactionsEl = el.querySelector('.reactions');
+
+  reactionsEl.innerHTML = `
+    <button onclick="react('${id}', 'like')">👍 ${data.reactions?.like || 0}</button>
+    <button onclick="react('${id}', 'love')">❤️ ${data.reactions?.love || 0}</button>
+    <button onclick="react('${id}', 'clap')">👏 ${data.reactions?.clap || 0}</button>
+  `;
 }
 
 // ─── Firestore: Viewers ───────────────────────────────────────
