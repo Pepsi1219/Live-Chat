@@ -223,6 +223,7 @@ function triggerReactionEffect(type) {
   document.body.appendChild(el);
   el.addEventListener('animationend', () => el.remove());
 }
+window.react = react;
 
 // ─── Input ────────────────────────────────────────────────────
 function updateCharCount() {
