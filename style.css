@@ -214,6 +214,7 @@ html, body {
 /* Bubble */
 .bubble {
   flex: 1;
+  max-width: 100%;
   background: var(--glass-bg);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
@@ -235,7 +236,7 @@ html, body {
   letter-spacing: 0.1px;
 }
 .bubble-text {
-  font-size: 14.5px;
+  font-size: 34.5px;
   font-weight: 400;
   line-height: 1.5;
   color: var(--text-primary);
@@ -297,7 +298,7 @@ html, body {
   outline: none;
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 400;
   padding: 10px 16px;
   caret-color: var(--accent);
@@ -468,4 +469,46 @@ html, body {
     transform: translateX(-50%);
   }
   .modal { max-width: 380px; }
+}
+html, body {
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+#comment-input {
+  font-size: 16px;
+}
+
+/* Effect ความคิดเห็น */
+.reactions {
+  margin-top: 6px;
+  display: flex;
+  gap: 6px;
+}
+
+.reactions button {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  border-radius: 8px;
+  padding: 4px 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.reaction-float {
+  position: fixed;
+  font-size: 28px;
+  pointer-events: none;
+  animation: floatUp 2s ease-out forwards;
+  z-index: 999;
+}
+
+@keyframes floatUp {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-200px) scale(1.5);
+    opacity: 0;
+  }
 }
