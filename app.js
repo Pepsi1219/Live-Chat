@@ -335,6 +335,10 @@ viewerEl.textContent = viewerCount;
 nameInput.focus();
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js')
-    .then(() => console.log('Service Worker Registered'));
+  window.addEventListener('load', () => {
+    // ใส่ ./ นำหน้าเพื่อให้มั่นใจว่าหาไฟล์ในโฟลเดอร์ปัจจุบัน
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('Service Worker Registered!', reg))
+      .catch(err => console.log('Service Worker Error:', err));
+  });
 }
