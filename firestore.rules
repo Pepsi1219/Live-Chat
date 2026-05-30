@@ -1,0 +1,115 @@
+rules_version = '2';
+
+// ────────────────────────────────────────────────────────────────
+//  Live Comments — Firestore Security Rules  (Phase 0 + 1)
+//
+//  หลักการ:
+//   • อ่านได้สาธารณะ (เป็นห้องแชทสด) แต่ "เขียน" ต้องผ่านการ validate ทุก field
+//   • client เขียน DB ตรงได้ แต่ rules บังคับ schema/ขนาด/เวลา/เจ้าของ
+//   • admin (ตาม uid allowlist) เท่านั้นที่ลบ/ปิดห้องได้  → ไม่มีรหัสฝังใน client
+//
+//  ⚠️ Residual risk (rules-only, ไม่มี Cloud Functions):
+//   • rate-limit เป็น best-effort (ผูก batch ข้าม document แบบบังคับไม่ได้)
+//   • กรองคำหยาบทำได้แค่ฝั่ง client  → ต้องใช้ Functions ถึงจะปิดสนิท
+//   ดูรายละเอียดใน SETUP.md
+// ────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 🔑 ใส่ UID ของบัญชี admin ที่นี่ (ดูวิธีหาใน SETUP.md)
+    function adminUids() {
+      return [
+        'REPLACE_WITH_ADMIN_UID'
+      ];
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.uid in adminUids();
+    }
+
+    match /rooms/{roomId} {
+      // metadata ของห้อง (title, status, settings) — อ่านได้ทุกคน, แก้ได้เฉพาะ admin
+      allow read: if true;
+      allow write: if isAdmin();
+
+      // ── ข้อความ ────────────────────────────────────────────────
+      match /messages/{msgId} {
+        allow read: if true;
+
+        allow create: if isSignedIn()
+                      && isValidNewMessage()
+                      && notRateLimited();
+
+        // ผู้ใช้ทั่วไปแก้ได้เฉพาะตัวนับ reaction (delta 0..1); admin แก้ได้ทุกอย่าง
+        allow update: if isAdmin()
+                      || (isSignedIn() && isReactionBump());
+
+        allow delete: if isAdmin();
+
+        function isValidNewMessage() {
+          let d = request.resource.data;
+          return d.uid == request.auth.uid
+            && d.text is string  && d.text.size() > 0 && d.text.size() <= 200
+            && d.name is string  && d.name.size() > 0 && d.name.size() <= 20
+            && d.color is string && d.color.matches('#[0-9a-fA-F]{6}')
+            && d.status == 'visible'
+            && d.createdAt == request.time            // บังคับ serverTimestamp() (กันเวลา client เพี้ยน)
+            && d.reactionCounts.like == 0
+            && d.reactionCounts.love == 0
+            && d.reactionCounts.clap == 0
+            && d.expireAt is timestamp                 // ใช้กับ TTL policy (ลบอัตโนมัติ)
+            && d.keys().hasOnly([
+                 'uid','name','color','text','createdAt','status','reactionCounts','expireAt'
+               ]);
+        }
+
+        function isReactionBump() {
+          let oldC = resource.data.reactionCounts;
+          let newC = request.resource.data.reactionCounts;
+          return request.resource.data.diff(resource.data)
+                   .affectedKeys().hasOnly(['reactionCounts'])
+            && deltaOk(oldC.like, newC.like)
+            && deltaOk(oldC.love, newC.love)
+            && deltaOk(oldC.clap, newC.clap);
+        }
+
+        // อนุญาตเปลี่ยนแปลงตัวนับได้ทีละ 0..1 ต่อการเขียน (กันปั่นตัวเลข)
+        function deltaOk(o, n) {
+          return (n - o) >= 0 && (n - o) <= 1;
+        }
+      }
+
+      // 1 ผู้ใช้ react ได้ครั้งเดียวต่อข้อความ (uid = doc id)
+      match /messages/{msgId}/reactions/{uid} {
+        allow read: if true;
+        allow create: if isSignedIn()
+                      && uid == request.auth.uid
+                      && request.resource.data.type in ['like','love','clap'];
+        allow delete: if isSignedIn() && uid == request.auth.uid;
+      }
+
+      // best-effort slow-mode (ดู residual risk ด้านบน)
+      match /rateLimits/{uid} {
+        allow read:  if isSignedIn() && uid == request.auth.uid;
+        allow write: if isSignedIn() && uid == request.auth.uid
+                     && request.resource.data.nextAllowed is timestamp
+                     && request.resource.data.nextAllowed > request.time;
+      }
+
+      function notRateLimited() {
+        let rl = /databases/$(database)/documents/rooms/$(roomId)/rateLimits/$(request.auth.uid);
+        return !exists(rl) || get(rl).data.nextAllowed <= request.time;
+      }
+    }
+
+    // ปฏิเสธทุกอย่างที่ไม่ได้ระบุไว้ข้างบน
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

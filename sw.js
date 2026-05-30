@@ -1,5 +1,6 @@
-const CACHE_NAME = "live-comments-v3"; // อัปเดตเวอร์ชันเพื่อล้างแคชเก่า
+const CACHE_NAME = "live-comments-v4";
 
+// เฉพาะไฟล์ที่มีอยู่จริงเท่านั้น (เดิม icon-152.png ไม่มีไฟล์ → addAll ล้มทั้งชุด)
 const urlsToCache = [
   "./",
   "./index.html",
@@ -7,48 +8,52 @@ const urlsToCache = [
   "./app.js",
   "./manifest.json",
   "./icon-192.png",
-  "./icon-512.png",
-  "./icon-152.png",
-  "./screenshot-mobile.png", // เพิ่มไฟล์ภาพ Screenshot มือถือ
-  "./screenshot-desktop.png" // เพิ่มไฟล์ภาพ Screenshot คอมพิวเตอร์
+  "./icon-512.png"
 ];
 
-// 1. ขั้นตอน Install: เก็บไฟล์ลง Cache
 self.addEventListener("install", event => {
-  // บังคับให้ Service Worker ตัวใหม่ทำงานทันที ไม่ต้องรอปิดเบราว์เซอร์เก่า
-  self.skipWaiting(); 
-  
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      console.log("Caching all assets...");
-      return cache.addAll(urlsToCache);
-    })
+    caches.open(CACHE_NAME).then(cache =>
+      // addAll ล้มทั้งชุดถ้าไฟล์ใดหาย → ใส่ทีละไฟล์แบบ best-effort แทน
+      Promise.allSettled(urlsToCache.map(url => cache.add(url)))
+    )
   );
 });
 
-// 2. ขั้นตอน Activate: ลบ Cache เก่าทิ้ง
 self.addEventListener("activate", event => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cache => {
-          if (cache !== CACHE_NAME) {
-            console.log("Deleting old cache:", cache);
-            return caches.delete(cache);
-          }
-        })
-      );
-    })
+    caches.keys().then(names =>
+      Promise.all(names.filter(n => n !== CACHE_NAME).map(n => caches.delete(n)))
+    ).then(() => self.clients.claim())
   );
 });
 
-// 3. ขั้นตอน Fetch: ดึงข้อมูลจาก Cache ถ้าไม่มีค่อยไปดึงจากเน็ต
 self.addEventListener("fetch", event => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+
+  const url = new URL(req.url);
+
+  // ข้าม Firebase / API ทั้งหมด — ต้อง real-time เสมอ ห้าม cache
+  if (url.origin !== self.location.origin) return;
+
+  // network-first สำหรับการเปิดหน้า (HTML) → สถานะเปิด/ปิดงานไม่ค้าง
+  if (req.mode === "navigate") {
+    event.respondWith(
+      fetch(req).catch(() => caches.match("./index.html"))
+    );
+    return;
+  }
+
+  // cache-first สำหรับ static asset (เปิดแอปไว)
   event.respondWith(
-    caches.match(event.request).then(response => {
-      // ถ้าเจอใน Cache ให้ส่งไฟล์จาก Cache (ช่วยให้เปิดแอปไวมาก)
-      // ถ้าไม่เจอ ให้ไป fetch จากเน็ตตามปกติ
-      return response || fetch(event.request);
-    })
+    caches.match(req).then(cached =>
+      cached || fetch(req).then(res => {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then(c => c.put(req, copy));
+        return res;
+      })
+    )
   );
 });

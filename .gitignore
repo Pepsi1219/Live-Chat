@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+database-debug.log
+ui-debug.log
+
+# build
+dist/
+.vite/
+
+# os / editor
+.DS_Store
+*.log
+.vscode/
+.idea/
