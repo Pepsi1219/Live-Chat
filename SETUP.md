@@ -27,11 +27,11 @@
 | M4 error/loading + ข้อความหาย | ✅ | toast + คืนค่า input เมื่อ fail |
 | M5 XSS | ✅ | render ด้วย DOM API + `safeColor()` + ไม่มี inline onclick |
 | M6 docId เป็น element id | ✅ | ใช้ `data-id` + `Map` |
-| L1 README/LICENSE/gitignore | ◑ | เพิ่ม `.gitignore`, `SETUP.md` (LICENSE ยังไม่ใส่) |
-| L2 config ใน repo | ◑ | คงไว้ก่อน (พึ่ง rules+App Check) — ย้าย .env ใน Phase 2 |
-| L3 sw cache ไฟล์ที่ไม่มี | ✅ | ลบ icon-152 + allSettled + network-first HTML |
-| L4 test/CI/linter | ⬜ | Phase 2–3 |
-| L5 inline style/magic strings | ◑ | ย้าย logic เข้า config ใน app.js (modularize Phase 2) |
+| L1 README/LICENSE/gitignore | ✅ | `.gitignore` + `README.md` + `SETUP.md` |
+| L2 config ใน repo | ✅ | ย้ายไป `.env` ผ่าน Vite (`import.meta.env`) |
+| L3 sw cache ไฟล์ที่ไม่มี | ✅ | precache shell + runtime cache + network-first HTML |
+| L4 test/CI/linter | ✅ | ESLint + Prettier + Vitest + Playwright (CI = Phase 3) |
+| L5 inline style/magic strings | ✅ | แยก modules ใน `src/` + ค่าคงที่อยู่ใน `config.js` |
 
 ---
 
@@ -57,6 +57,10 @@ Console → **Realtime Database → Create database** → เลือก region
 
 ### 4. Deploy rules + hosting
 ```bash
+npm install                 # ติดตั้ง dependencies
+cp .env.example .env        # ตั้งค่า Firebase config
+npm run build               # build ลง dist/
+
 npm install -g firebase-tools
 firebase login
 firebase deploy --only firestore:rules,database,hosting
@@ -104,9 +108,37 @@ Console → **Firestore → TTL** → Create policy
 
 ---
 
-## ทดสอบ local
+## Development (Phase 2)
+
+โครงสร้างโค้ดอยู่ใน `src/` (ES modules) build ด้วย Vite
+
 ```bash
-firebase emulators:start          # firestore + database + hosting + auth
-# หรือเสิร์ฟ static ธรรมดา
-npx serve .
+npm run dev          # dev server (http://localhost:5173)
+npm run build        # production build → dist/
+npm run preview      # ดู build ที่ build แล้ว
+npm run lint         # ESLint
+npm run format       # Prettier
+npm test             # unit tests (Vitest)
+npm run test:e2e     # e2e (Playwright — ครั้งแรก: npx playwright install chromium)
+```
+
+โครงสร้าง module:
+
+| ไฟล์ | หน้าที่ |
+|------|---------|
+| `src/config.js`   | ค่าคงที่ + Firebase config (จาก `.env`) |
+| `src/firebase.js` | init app / auth / firestore / rtdb / app-check |
+| `src/utils.js`    | pure helpers (มี unit test) |
+| `src/state.js`    | shared state |
+| `src/dom.js`      | element references |
+| `src/ui.js`       | toast / scroll / char counter |
+| `src/render.js`   | render ข้อความ (DOM API ล้วน, กัน XSS) |
+| `src/messages.js` | stream / send / react |
+| `src/presence.js` | viewer presence (RTDB) |
+| `src/admin.js`    | ล้างคอมเมนต์ (admin) |
+| `src/main.js`     | boot + wiring |
+
+### ทดสอบกับ backend จริง (emulator)
+```bash
+firebase emulators:start    # firestore + database + auth
 ```

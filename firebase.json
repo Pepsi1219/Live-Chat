@@ -6,18 +6,8 @@
     "rules": "database.rules.json"
   },
   "hosting": {
-    "public": ".",
-    "ignore": [
-      "firebase.json",
-      "firestore.rules",
-      "database.rules.json",
-      "**/.*",
-      "**/node_modules/**",
-      "SETUP.md",
-      "README.md",
-      "screenshot-*.png",
-      "screenshot-*.jpg"
-    ],
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "headers": [
       {
         "source": "**/*.@(js|css|json|png|jpg)",
