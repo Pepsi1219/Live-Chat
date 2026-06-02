@@ -1,4 +1,4 @@
-const CACHE_NAME = "live-comments-v5";
+const CACHE_NAME = "live-comments-v6";
 
 // precache เฉพาะ shell + ไฟล์ static ที่ชื่อคงที่
 // (bundle ของ Vite มี hash → ใช้ runtime cache ใน fetch handler แทน)
@@ -6,6 +6,7 @@ const urlsToCache = [
   "./",
   "./index.html",
   "./manifest.json",
+  "./theme-init.js",
   "./icon-192.png",
   "./icon-512.png"
 ];

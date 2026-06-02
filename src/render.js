@@ -9,10 +9,11 @@ import {
   formatTime,
   REACTION_EMOJI,
 } from './utils.js';
-import { scrollToBottom } from './ui.js';
+import { maybeScrollOrNotify } from './ui.js';
 
 export const messageEls = new Map(); // msgId -> card element (แทน getElementById)
 
+// ─── Reaction button ────────────────────────────────────────────
 function reactionBtn(id, type, count, onReact) {
   const b = document.createElement('button');
   b.type = 'button';
@@ -40,14 +41,19 @@ function reactionBtn(id, type, count, onReact) {
   return b;
 }
 
-function reportBtn(id, onReport) {
+// ─── Pin button (admin only — ซ่อนด้วย CSS สำหรับคนปกติ) ──────────
+function createPinButton(id, isPinned, onPin) {
   const b = document.createElement('button');
   b.type = 'button';
-  b.className = 'report-btn';
-  b.setAttribute('aria-label', 'รายงานข้อความนี้');
-  b.title = 'รายงาน';
-  b.textContent = '⚑';
-  b.addEventListener('click', () => onReport(id));
+  b.className = 'pin-btn' + (isPinned ? ' active' : '');
+  b.setAttribute(
+    'aria-label',
+    isPinned ? 'ยกเลิกปักหมุดข้อความ' : 'ปักหมุดข้อความ'
+  );
+  b.setAttribute('aria-pressed', isPinned ? 'true' : 'false');
+  b.title = isPinned ? 'ยกเลิกปักหมุด' : 'ปักหมุดข้อความ';
+  b.textContent = '📌';
+  b.addEventListener('click', () => onPin(id));
   return b;
 }
 
@@ -58,12 +64,13 @@ function buildCard({
   color,
   createdMs,
   isSelf,
+  isPinned,
   reactions,
   onReact,
-  onReport,
+  onPin,
 }) {
   const card = document.createElement('article');
-  card.className = 'comment-card' + (isSelf ? ' is-self' : '');
+  card.className = 'comment-card' + (isSelf ? ' is-self' : '') + (isPinned ? ' pinned' : '');
   card.dataset.id = id;
   card.dataset.ts = String(createdMs);
   card.setAttribute('aria-label', `ข้อความจาก ${name}`);
@@ -77,18 +84,25 @@ function buildCard({
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
 
-  const nameEl = document.createElement('div');
+  // header: ชื่อ (สี avatar) + เวลา อยู่บรรทัดเดียวกัน
+  const headerEl = document.createElement('div');
+  headerEl.className = 'bubble-header';
+
+  const nameEl = document.createElement('span');
   nameEl.className = 'bubble-name';
   nameEl.textContent = name;
-
-  const textEl = document.createElement('p');
-  textEl.className = 'bubble-text';
-  textEl.textContent = text;
+  nameEl.style.color = safeColor(color);
 
   const timeEl = document.createElement('time');
   timeEl.className = 'bubble-time';
   timeEl.dateTime = new Date(createdMs).toISOString();
   timeEl.textContent = formatTime(createdMs);
+
+  headerEl.append(nameEl, timeEl);
+
+  const textEl = document.createElement('p');
+  textEl.className = 'bubble-text';
+  textEl.textContent = text;
 
   const actionsEl = document.createElement('div');
   actionsEl.className = 'bubble-actions';
@@ -104,30 +118,62 @@ function buildCard({
   );
 
   actionsEl.append(reactionsEl);
-  // ไม่แสดงปุ่ม report บนข้อความของตัวเอง
-  if (!isSelf && onReport) {
-    actionsEl.append(reportBtn(id, onReport));
+
+  // Pin button (always rendered, CSS hide for non-admin)
+  if (onPin) {
+    actionsEl.append(createPinButton(id, isPinned, onPin));
   }
 
-  bubble.append(nameEl, textEl, timeEl, actionsEl);
+  bubble.append(headerEl, textEl, actionsEl);
   card.append(avatar, bubble);
   return card;
 }
 
-// แทรกการ์ดตามลำดับเวลา
-// Fast path O(1): ข้อความใหม่มักมาหลังสุดเสมอ (limitToLast + asc order)
-// Slow path O(n): fallback สำหรับกรณีพิเศษที่ timestamp ไม่เรียงลำดับ (หายากมาก)
+// ─── Pinned section (lazy create) ───────────────────────────────
+let _pinnedSection = null;
+function getPinnedSection() {
+  if (_pinnedSection) {
+    _pinnedSection.classList.remove('empty');
+    return _pinnedSection;
+  }
+  _pinnedSection = document.createElement('div');
+  _pinnedSection.className = 'pinned-section';
+  _pinnedSection.setAttribute('aria-label', 'ข้อความที่ปักหมุด');
+  // แทรกหลัง feed-spacer-top (= แสดงบนสุดของ feed)
+  const spacerTop = feed.querySelector('.feed-spacer-top');
+  if (spacerTop && spacerTop.nextSibling) {
+    feed.insertBefore(_pinnedSection, spacerTop.nextSibling);
+  } else {
+    feed.insertBefore(_pinnedSection, feed.firstChild);
+  }
+  return _pinnedSection;
+}
+
+function insertPinned(card, pinnedMs) {
+  const sec = getPinnedSection();
+  card.dataset.pinnedAt = String(pinnedMs);
+  // sort by pinnedAt desc — pin ล่าสุดอยู่บนสุด
+  for (const existing of sec.children) {
+    if (Number(existing.dataset.pinnedAt || 0) < pinnedMs) {
+      sec.insertBefore(card, existing);
+      return;
+    }
+  }
+  sec.appendChild(card);
+}
+
+// ─── Insert by time (เฉพาะ direct children ของ feed) ─────────────
+// Fast path O(1): ข้อความใหม่มักมาหลังสุด
+// Slow path O(n): fallback กรณีพิเศษที่ timestamp ไม่เรียงลำดับ
 function insertByTime(card) {
   const ms = Number(card.dataset.ts);
-  // getElementsByClassName คืน live HTMLCollection — index access เป็น O(1)
-  const cards = feed.getElementsByClassName('comment-card');
+  // :scope > — เฉพาะลูกตรง (ไม่รวมการ์ดใน .pinned-section)
+  const cards = feed.querySelectorAll(':scope > .comment-card');
   const lastCard = cards[cards.length - 1];
   if (!lastCard || ms >= Number(lastCard.dataset.ts)) {
-    // fast path: แค่ append ก่อน spacer-bottom
     feed.insertBefore(card, feed.lastElementChild);
     return;
   }
-  // slow path: scan forward เพื่อหาตำแหน่งแทรก (out-of-order message)
   for (const existing of cards) {
     if (Number(existing.dataset.ts) > ms) {
       feed.insertBefore(card, existing);
@@ -140,9 +186,10 @@ function insertByTime(card) {
 export function renderMessage(
   id,
   data,
-  { onReact, onReport, scroll = false } = {}
+  { onReact, onPin, scroll = false } = {}
 ) {
   if (messageEls.has(id)) return;
+  const isPinned = data.isPinned === true;
   const card = buildCard({
     id,
     name: data.name || '?',
@@ -150,21 +197,29 @@ export function renderMessage(
     color: data.color,
     createdMs: tsToMillis(data.createdAt),
     isSelf: data.uid === state.uid,
+    isPinned,
     reactions: data.reactionCounts || {},
     onReact,
-    onReport,
+    onPin,
   });
   messageEls.set(id, card);
-  insertByTime(card);
 
-  if (messageEls.size > MAX_DOM) {
-    const oldest = feed.querySelector('.comment-card');
+  if (isPinned) {
+    insertPinned(card, tsToMillis(data.pinnedAt));
+  } else {
+    insertByTime(card);
+  }
+
+  // MAX_DOM trim — ลบจาก normal section เท่านั้น (pinned ไม่นับ)
+  const normalCount = feed.querySelectorAll(':scope > .comment-card').length;
+  if (messageEls.size > MAX_DOM && normalCount > 0) {
+    const oldest = feed.querySelector(':scope > .comment-card');
     if (oldest) {
       messageEls.delete(oldest.dataset.id);
       oldest.remove();
     }
   }
-  if (scroll) scrollToBottom();
+  if (scroll) maybeScrollOrNotify(data.uid === state.uid);
 }
 
 export function updateReactions(card, reactions) {
@@ -180,6 +235,46 @@ export function updateReactions(card, reactions) {
     b.classList.toggle('reacted', isActive);
     b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
+}
+
+// ─── Update pin state — ย้ายการ์ดเมื่อ admin ปัก/ยกเลิก ────────────
+export function updatePinState(card, isPinned, pinnedMs) {
+  const wasPinned = card.classList.contains('pinned');
+
+  // อัปเดต pin button visual
+  const btn = card.querySelector('.pin-btn');
+  if (btn) {
+    btn.classList.toggle('active', isPinned);
+    btn.setAttribute('aria-pressed', isPinned ? 'true' : 'false');
+    btn.setAttribute(
+      'aria-label',
+      isPinned ? 'ยกเลิกปักหมุดข้อความ' : 'ปักหมุดข้อความ'
+    );
+    btn.title = isPinned ? 'ยกเลิกปักหมุด' : 'ปักหมุดข้อความ';
+  }
+
+  // ย้ายตำแหน่งถ้าสถานะเปลี่ยน
+  if (isPinned && !wasPinned) {
+    card.classList.add('pinned');
+    card.remove();
+    insertPinned(card, pinnedMs);
+  } else if (!isPinned && wasPinned) {
+    card.classList.remove('pinned');
+    delete card.dataset.pinnedAt;
+    card.remove();
+    insertByTime(card);
+    // ซ่อน section ถ้าว่าง
+    if (_pinnedSection && _pinnedSection.children.length === 0) {
+      _pinnedSection.classList.add('empty');
+    }
+  } else if (isPinned && wasPinned) {
+    // ถ้า pinnedAt เปลี่ยน — re-sort
+    const currentMs = Number(card.dataset.pinnedAt || 0);
+    if (currentMs !== pinnedMs) {
+      card.remove();
+      insertPinned(card, pinnedMs);
+    }
+  }
 }
 
 // Optimistic update — DOM ขยับทันทีก่อนรอ server (และ rollback ได้)

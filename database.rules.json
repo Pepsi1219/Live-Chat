@@ -4,7 +4,7 @@
       "$roomId": {
         ".read": true,
         "$uid": {
-          ".write": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && (auth.uid === $uid || (data.exists() && !newData.exists() && data.child('lastSeen').val() < (now - 60000)))",
           ".validate": "!newData.exists() || (newData.hasChildren(['online','name','lastSeen']) && newData.child('name').isString() && newData.child('name').val().length <= 20)"
         }
       }

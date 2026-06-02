@@ -1,8 +1,10 @@
-// ─── Admin: ล้างคอมเมนต์ผ่าน Auth จริง (ไม่มีรหัสใน client, C2) ──
+// ─── Admin: 2-step flow — กดครั้งแรก = sign-in, ครั้งที่ 2 = ล้าง ──
+// (ไม่มีรหัสฝังใน client, C2) — security จริงคือ firestore.rules
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, getDocs, deleteDoc } from 'firebase/firestore';
 import { auth, db } from './firebase.js';
 import { ROOM_ID } from './config.js';
+import { state } from './state.js';
 import { toast } from './ui.js';
 
 // ลบทุก doc ใน subcollection ของ message (reactions + reports)
@@ -19,14 +21,24 @@ async function deleteSubcollections(msgId) {
 }
 
 export async function adminClear() {
-  if (!confirm('ล้างคอมเมนต์ทั้งหมด? (ต้องเป็น admin)')) return;
-  try {
-    if (!auth.currentUser || auth.currentUser.isAnonymous) {
-      const email = prompt('Admin email:');
-      const pass = prompt('Admin password:');
-      if (!email || !pass) return;
+  // Step 1: ยังไม่ login admin → sign in อย่างเดียว (ไม่ลบ)
+  if (!state.isAdmin) {
+    const email = prompt('Admin email:');
+    const pass = prompt('Admin password:');
+    if (!email || !pass) return;
+    try {
       await signInWithEmailAndPassword(auth, email, pass);
+      toast('Login admin สำเร็จ ✅ ปุ่มปักหมุดใช้ได้แล้ว');
+    } catch (err) {
+      console.error('admin login failed', err);
+      toast('Login ไม่สำเร็จ');
     }
+    return;
+  }
+
+  // Step 2: เป็น admin แล้ว → confirm + ล้าง
+  if (!confirm('ล้างคอมเมนต์ทั้งหมด?')) return;
+  try {
     const snap = await getDocs(collection(db, `rooms/${ROOM_ID}/messages`));
     // ลบ subcollections (reactions + reports) ก่อน แล้วค่อยลบ message doc
     await Promise.all(
@@ -38,6 +50,6 @@ export async function adminClear() {
     toast('ล้างคอมเมนต์แล้ว ✅');
   } catch (err) {
     console.error('admin clear failed', err);
-    toast('ล้างไม่สำเร็จ (ตรวจสอบสิทธิ์ admin)');
+    toast('ล้างไม่สำเร็จ');
   }
 }

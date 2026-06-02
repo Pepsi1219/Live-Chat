@@ -27,12 +27,13 @@ import {
   renderMessage,
   removeMessage,
   updateReactions,
+  updatePinState,
   applyOptimisticReaction,
   messageEls,
 } from './render.js';
 import { scrollToBottom, toast, updateCharCount } from './ui.js';
-import { REACTION_EMOJI } from './utils.js';
-import { reportMessage } from './moderation.js';
+import { REACTION_EMOJI, tsToMillis } from './utils.js';
+import { togglePin } from './pin.js';
 
 function messagesCol() {
   return collection(db, `rooms/${ROOM_ID}/messages`);
@@ -156,13 +157,16 @@ export function startMessageStream() {
           // initial batch ไม่ scroll ทีละใบ — รอ scrollToBottom() ท้าย
           renderMessage(id, data, {
             onReact: react,
-            onReport: reportMessage,
+            onPin: togglePin,
             scroll: !isInitial,
           });
         } else if (change.type === 'modified') {
-          // reaction/status เปลี่ยน — sync ทุก user ที่เปิดอยู่
+          // reaction / pin เปลี่ยน — sync ทุก user ที่เปิดอยู่
           const el = messageEls.get(id);
-          if (el) updateReactions(el, data.reactionCounts);
+          if (el) {
+            updateReactions(el, data.reactionCounts);
+            updatePinState(el, data.isPinned === true, tsToMillis(data.pinnedAt));
+          }
         } else if (change.type === 'removed') {
           removeMessage(id);
         }

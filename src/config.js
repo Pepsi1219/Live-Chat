@@ -9,6 +9,10 @@ export const MAX_DOM = 200; // กันการ์ดล้น DOM
 export const SLOW_MODE_MS = 3000; // best-effort slow mode
 export const MSG_TTL_MS = 24 * 60 * 60 * 1000; // ข้อความหมดอายุใน 24 ชม. (Firestore TTL)
 
+// Admin UIDs — ต้องตรงกับใน firestore.rules adminUids()
+// ใช้ฝั่ง client แค่เพื่อ UI visibility (ปุ่ม pin) — security ยังเป็นของ rules
+export const ADMIN_UIDS = ['3X214jaNe2QQs2BPkE5EugDHy0C3'];
+
 export const AVATAR_COLORS = [
   '#FF6B6B',
   '#4ECDC4',

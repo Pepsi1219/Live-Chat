@@ -5,6 +5,7 @@ export const state = {
   myName: '',
   myColor: '',
   joined: false,
+  isAdmin: false, // true เมื่อ sign-in ด้วย email/password ที่อยู่ใน ADMIN_UIDS
   messageStreamStarted: false,
   unsubMessages: null,
   // own reactions: msgId → 'like' | 'love' | 'clap' (สำหรับ visual active state)

@@ -9,3 +9,4 @@ export const modalOverlay = document.getElementById('modal-overlay');
 export const nameInput = document.getElementById('name-input');
 export const joinBtn = document.getElementById('join-btn');
 export const clearBtn = document.getElementById('clear-btn');
+export const themeToggleBtn = document.getElementById('theme-toggle');
