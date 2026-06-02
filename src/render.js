@@ -198,10 +198,7 @@ export function applyOptimisticReaction(msgId, prevType, newType) {
     const isActive = type === newType;
     b.classList.toggle('reacted', isActive);
     b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-    b.setAttribute(
-      'aria-label',
-      `${REACTION_EMOJI[type]} ${count} คน`
-    );
+    b.setAttribute('aria-label', `${REACTION_EMOJI[type]} ${count} คน`);
   });
 
   if (newType) state.myReactions.set(msgId, newType);
