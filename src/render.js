@@ -70,7 +70,8 @@ function buildCard({
   onPin,
 }) {
   const card = document.createElement('article');
-  card.className = 'comment-card' + (isSelf ? ' is-self' : '') + (isPinned ? ' pinned' : '');
+  card.className =
+    'comment-card' + (isSelf ? ' is-self' : '') + (isPinned ? ' pinned' : '');
   card.dataset.id = id;
   card.dataset.ts = String(createdMs);
   card.setAttribute('aria-label', `ข้อความจาก ${name}`);

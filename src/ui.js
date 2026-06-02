@@ -32,7 +32,9 @@ let _unread = 0;
 const NEAR_BOTTOM_PX = 100;
 
 function isNearBottom() {
-  return feed.scrollHeight - feed.scrollTop - feed.clientHeight <= NEAR_BOTTOM_PX;
+  return (
+    feed.scrollHeight - feed.scrollTop - feed.clientHeight <= NEAR_BOTTOM_PX
+  );
 }
 
 function setUnread(n) {

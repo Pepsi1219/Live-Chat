@@ -165,7 +165,11 @@ export function startMessageStream() {
           const el = messageEls.get(id);
           if (el) {
             updateReactions(el, data.reactionCounts);
-            updatePinState(el, data.isPinned === true, tsToMillis(data.pinnedAt));
+            updatePinState(
+              el,
+              data.isPinned === true,
+              tsToMillis(data.pinnedAt)
+            );
           }
         } else if (change.type === 'removed') {
           removeMessage(id);
