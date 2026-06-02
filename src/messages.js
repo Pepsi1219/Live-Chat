@@ -32,6 +32,7 @@ import {
 } from './render.js';
 import { scrollToBottom, toast, updateCharCount } from './ui.js';
 import { REACTION_EMOJI } from './utils.js';
+import { reportMessage } from './moderation.js';
 
 function messagesCol() {
   return collection(db, `rooms/${ROOM_ID}/messages`);
@@ -85,7 +86,9 @@ export async function startMessageStream() {
       query(col, orderBy('createdAt', 'desc'), limit(INITIAL_LIMIT))
     );
     const docsAsc = snap.docs.reverse();
-    docsAsc.forEach((d) => renderMessage(d.id, d.data(), { onReact: react }));
+    docsAsc.forEach((d) =>
+      renderMessage(d.id, d.data(), { onReact: react, onReport: reportMessage })
+    );
     if (docsAsc.length) {
       const newest = docsAsc[docsAsc.length - 1].data().createdAt;
       if (newest) boundary = newest;
@@ -102,7 +105,11 @@ export async function startMessageStream() {
         const id = change.doc.id;
         const data = change.doc.data();
         if (change.type === 'added') {
-          renderMessage(id, data, { onReact: react, scroll: true });
+          renderMessage(id, data, {
+            onReact: react,
+            onReport: reportMessage,
+            scroll: true,
+          });
         } else if (change.type === 'modified') {
           const el = messageEls.get(id);
           if (el) updateReactions(el, data.reactionCounts);

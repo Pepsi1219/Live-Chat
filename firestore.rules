@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // ────────────────────────────────────────────────────────────────
-//  Live Comments — Firestore Security Rules  (Phase 0 + 1)
+//  Live Comments — Firestore Security Rules  (Phase 0 + 1 + 3)
 //
 //  หลักการ:
 //   • อ่านได้สาธารณะ (เป็นห้องแชทสด) แต่ "เขียน" ต้องผ่านการ validate ทุก field
@@ -91,6 +91,18 @@ service cloud.firestore {
                       && uid == request.auth.uid
                       && request.resource.data.type in ['like','love','clap'];
         allow delete: if isSignedIn() && uid == request.auth.uid;
+      }
+
+      // Report: 1 คน report ได้ครั้งเดียวต่อข้อความ (uid = doc id)
+      // admin อ่านได้ทั้งหมด, สร้างได้เฉพาะ uid ตัวเอง, ลบไม่ได้ (audit trail)
+      match /messages/{msgId}/reports/{uid} {
+        allow read: if isAdmin();
+        allow create: if isSignedIn()
+                      && uid == request.auth.uid
+                      && request.resource.data.keys().hasOnly(['reportedAt','reporterUid'])
+                      && request.resource.data.reporterUid == request.auth.uid
+                      && request.resource.data.reportedAt == request.time;
+        allow update, delete: if false;
       }
 
       // best-effort slow-mode (ดู residual risk ด้านบน)

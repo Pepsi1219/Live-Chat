@@ -1,12 +1,23 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  // เส้นทางแบบ relative — ใช้ได้ทั้ง Firebase Hosting และ subpath
   base: './',
   build: {
     outDir: 'dist',
     sourcemap: true,
     target: 'es2020',
+    rollupOptions: {
+      output: {
+        // แยก Firebase SDK เป็น chunk → browser cache ข้ามเวอร์ชัน app
+        manualChunks: {
+          'firebase-app': ['firebase/app'],
+          'firebase-auth': ['firebase/auth'],
+          'firebase-firestore': ['firebase/firestore'],
+          'firebase-database': ['firebase/database'],
+          'firebase-app-check': ['firebase/app-check'],
+        },
+      },
+    },
   },
   test: {
     environment: 'jsdom',

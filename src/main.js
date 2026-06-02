@@ -20,6 +20,7 @@ import { adminClear } from './admin.js';
 import { renderSystem } from './render.js';
 import { toast, updateCharCount } from './ui.js';
 import { avatarColor, initialOf } from './utils.js';
+import { initMonitoring, captureError } from './monitoring.js';
 
 function joinLive() {
   const name = nameInput.value.trim();
@@ -73,6 +74,7 @@ function wireEvents() {
 }
 
 async function boot() {
+  await initMonitoring();
   viewerEl.textContent = '0';
   wireEvents();
 
@@ -91,7 +93,7 @@ async function boot() {
   try {
     await signInAnonymously(auth);
   } catch (err) {
-    console.error('anonymous sign-in failed', err);
+    captureError(err, { context: 'anonymous-sign-in' });
     toast('เชื่อมต่อไม่สำเร็จ');
   }
 

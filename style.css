@@ -540,3 +540,78 @@ html, body {
 @keyframes toast-out {
   to { opacity: 0; transform: translateX(-50%) translateY(10px); }
 }
+
+/* ─── a11y utilities ──────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: fixed;
+  top: -100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  color: #090a1a;
+  padding: 8px 16px;
+  border-radius: 0 0 8px 8px;
+  font-weight: 600;
+  z-index: 99999;
+  text-decoration: none;
+  transition: top 0.15s;
+}
+.skip-link:focus {
+  top: 0;
+}
+
+/* ─── Admin LIVE button (ทับทับ inline style เดิม) ─────────────── */
+.live-label {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: inherit;
+  padding: 0;
+  line-height: 1;
+}
+
+/* ─── Report button ────────────────────────────────────────────── */
+.bubble-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.report-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: opacity 0.15s, color 0.15s;
+  line-height: 1;
+}
+.comment-card:hover .report-btn,
+.comment-card:focus-within .report-btn {
+  opacity: 1;
+}
+.report-btn:hover {
+  color: #FF6B6B;
+}
+.report-btn:focus-visible {
+  outline: 2px solid rgba(255, 107, 107, 0.7);
+  opacity: 1;
+}

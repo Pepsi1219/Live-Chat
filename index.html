@@ -5,8 +5,9 @@
   <title>Live Comments</title>
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="description" content="ความคิดเห็นสดแบบเรียลไทม์สำหรับงานอีเวนต์และไลฟ์" />
 
-  <!-- Content Security Policy (M5) — Firebase ถูก bundle local จึงไม่ต้องโหลด script จาก gstatic -->
+  <!-- Content Security Policy (M5) — Firebase bundled local, no scripts from gstatic -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self';
@@ -36,56 +37,66 @@
 </head>
 
 <body>
+  <!-- Skip navigation (a11y) -->
+  <a href="#comment-feed" class="skip-link">ข้ามไปยังความคิดเห็น</a>
 
-  <!-- การเปิด/ปิดงานควบคุมจาก rooms/main.status ใน Firestore (ดู src/main.js → gateByRoomStatus) -->
-
-  <!-- Background -->
-  <div class="bg-orb orb-1"></div>
-  <div class="bg-orb orb-2"></div>
-  <div class="bg-orb orb-3"></div>
+  <!-- Background (decorative) -->
+  <div class="bg-orb orb-1" aria-hidden="true"></div>
+  <div class="bg-orb orb-2" aria-hidden="true"></div>
+  <div class="bg-orb orb-3" aria-hidden="true"></div>
 
   <!-- Header -->
-  <header class="glass-header">
+  <header class="glass-header" role="banner">
     <div class="header-inner">
 
-      <!-- 🔥 เปลี่ยนเป็น button -->
       <div class="live-badge">
-        <span class="live-dot"></span>
-        <button id="clear-btn" style="background:none;border:none;color:white;cursor:pointer;font-weight:700;">
-          LIVE
-        </button>
+        <span class="live-dot" aria-hidden="true"></span>
+        <!-- ปุ่ม LIVE เปิด admin clear เมื่อ long-press / click โดย admin -->
+        <button
+          id="clear-btn"
+          class="live-label"
+          aria-label="LIVE — กดเพื่อจัดการในฐานะ admin"
+        >LIVE</button>
       </div>
 
       <div class="header-title">
         <h1>ความคิดเห็น</h1>
       </div>
 
-      <div class="viewer-count">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <div class="viewer-count" aria-label="จำนวนผู้ชม">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
           <circle cx="9" cy="7" r="4"/>
           <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
           <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
-        <span id="viewer-count">0</span>
+        <span id="viewer-count" aria-live="polite" aria-atomic="true">0</span>
       </div>
 
     </div>
   </header>
 
   <!-- Feed -->
-  <main class="comment-feed" id="comment-feed" role="log" aria-live="polite">
-    <div class="feed-spacer-top"></div>
-    <div class="feed-spacer-bottom"></div>
+  <main
+    id="comment-feed"
+    class="comment-feed"
+    role="log"
+    aria-live="polite"
+    aria-label="ความคิดเห็นสด"
+    aria-relevant="additions"
+  >
+    <div class="feed-spacer-top" aria-hidden="true"></div>
+    <div class="feed-spacer-bottom" aria-hidden="true"></div>
   </main>
 
   <!-- Input -->
-  <footer class="glass-footer">
+  <footer class="glass-footer" role="contentinfo">
     <div class="input-row">
-      <div class="avatar-self">
+      <div class="avatar-self" aria-hidden="true">
         <span id="self-initial">A</span>
       </div>
 
+      <label for="comment-input" class="sr-only">แสดงความคิดเห็น</label>
       <div class="input-wrapper glass-input">
         <input
           type="text"
@@ -95,35 +106,51 @@
           autocomplete="off"
           autocorrect="off"
           spellcheck="false"
+          aria-describedby="char-count"
         />
       </div>
 
-      <button class="send-btn" id="send-btn">➤</button>
+      <button class="send-btn" id="send-btn" aria-label="ส่งความคิดเห็น">➤</button>
     </div>
 
-    <div class="char-count" id="char-count">200</div>
+    <div
+      id="char-count"
+      class="char-count"
+      aria-live="polite"
+      aria-atomic="true"
+      aria-label="อักขระที่เหลือ"
+    >200</div>
   </footer>
 
-  <!-- Modal -->
-  <div class="modal-overlay" id="modal-overlay">
+  <!-- Welcome modal -->
+  <div
+    class="modal-overlay"
+    id="modal-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modal-title"
+    aria-describedby="modal-desc"
+  >
     <div class="modal glass-card">
-      <div class="modal-icon">💬</div>
-      <h2 class="modal-title">ยินดีต้อนรับ</h2>
-      <p class="modal-subtitle">ใส่ชื่อของคุณเพื่อเข้าร่วม</p>
+      <div class="modal-icon" aria-hidden="true">💬</div>
+      <h2 class="modal-title" id="modal-title">ยินดีต้อนรับ</h2>
+      <p class="modal-subtitle" id="modal-desc">ใส่ชื่อของคุณเพื่อเข้าร่วม</p>
 
+      <label for="name-input" class="sr-only">ชื่อของคุณ</label>
       <input
         type="text"
         id="name-input"
         class="glass-input name-field"
         placeholder="ชื่อของคุณ"
         maxlength="20"
+        autocomplete="nickname"
       />
 
       <button class="join-btn" id="join-btn">เข้าร่วม Live</button>
     </div>
   </div>
 
-  <!-- App entry (Vite จะ bundle Firebase + modules ใน src/) -->
+  <!-- App entry (Vite bundles Firebase + src/ modules) -->
   <script type="module" src="/src/main.js"></script>
 
 </body>
