@@ -199,7 +199,7 @@ export function renderMessage(
     createdMs: tsToMillis(data.createdAt),
     isSelf: data.uid === state.uid,
     isPinned,
-    reactions: data.reactionCounts || {},
+    reactions: { like: 0, love: 0, clap: 0 }, // counts มาจาก RTDB listener (listenReactionCounts)
     onReact,
     onPin,
   });

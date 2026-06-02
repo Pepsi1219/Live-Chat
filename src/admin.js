@@ -1,14 +1,15 @@
 // ─── Admin: 2-step flow — กดครั้งแรก = sign-in, ครั้งที่ 2 = ล้าง ──
-// (ไม่มีรหัสฝังใน client, C2) — security จริงคือ firestore.rules
+// (ไม่มีรหัสฝังใน client, C2) — security จริงคือ firestore.rules + RTDB rules
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, getDocs, deleteDoc } from 'firebase/firestore';
-import { auth, db } from './firebase.js';
+import { ref, remove as rtdbRemove } from 'firebase/database';
+import { auth, db, rtdb } from './firebase.js';
 import { ROOM_ID } from './config.js';
 import { state } from './state.js';
 import { toast } from './ui.js';
 
-// ลบทุก doc ใน subcollection ของ message (reactions + reports)
-async function deleteSubcollections(msgId) {
+// ลบ reports subcollection ใน Firestore (legacy reactions ลบด้วยถ้ายังมีเหลือ)
+async function deleteFirestoreSubcollections(msgId) {
   const paths = ['reactions', 'reports'];
   await Promise.all(
     paths.map(async (sub) => {
@@ -40,10 +41,13 @@ export async function adminClear() {
   if (!confirm('ล้างคอมเมนต์ทั้งหมด?')) return;
   try {
     const snap = await getDocs(collection(db, `rooms/${ROOM_ID}/messages`));
-    // ลบ subcollections (reactions + reports) ก่อน แล้วค่อยลบ message doc
     await Promise.all(
       snap.docs.map(async (d) => {
-        await deleteSubcollections(d.id);
+        // ลบ Firestore subcollections (reports + legacy reactions)
+        await deleteFirestoreSubcollections(d.id);
+        // ลบ RTDB reactions (votes + counts) ของข้อความนี้
+        await rtdbRemove(ref(rtdb, `reactions/${ROOM_ID}/${d.id}`));
+        // ลบ message doc
         await deleteDoc(d.ref);
       })
     );
