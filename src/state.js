@@ -7,4 +7,8 @@ export const state = {
   joined: false,
   messageStreamStarted: false,
   unsubMessages: null,
+  // own reactions: msgId → 'like' | 'love' | 'clap' (สำหรับ visual active state)
+  myReactions: new Map(),
+  // กัน double-click ส่ง request ซ้ำซ้อน (msgId ที่กำลัง pending)
+  pendingReactions: new Set(),
 };

@@ -20,7 +20,7 @@ service cloud.firestore {
     // 🔑 ใส่ UID ของบัญชี admin ที่นี่ (ดูวิธีหาใน SETUP.md)
     function adminUids() {
       return [
-        'REPLACE_WITH_ADMIN_UID'
+        '3X214jaNe2QQs2BPkE5EugDHy0C3'
       ];
     }
 
@@ -63,6 +63,8 @@ service cloud.firestore {
             && d.reactionCounts.love == 0
             && d.reactionCounts.clap == 0
             && d.expireAt is timestamp                 // ใช้กับ TTL policy (ลบอัตโนมัติ)
+            && d.expireAt > request.time              // ต้องหมดอายุในอนาคต
+            && d.expireAt < request.time + duration.value(2, 'd') // ไม่เกิน 2 วัน (กัน client ตั้งนาน)
             && d.keys().hasOnly([
                  'uid','name','color','text','createdAt','status','reactionCounts','expireAt'
                ]);
@@ -78,23 +80,27 @@ service cloud.firestore {
             && deltaOk(oldC.clap, newC.clap);
         }
 
-        // อนุญาตเปลี่ยนแปลงตัวนับได้ทีละ 0..1 ต่อการเขียน (กันปั่นตัวเลข)
+        // อนุญาตเปลี่ยนแปลงตัวนับได้ -1..+1 ต่อการเขียน
+        // (-1 = ถอน/สลับออก, +1 = vote/สลับเข้า, 0 = type อื่นไม่กระทบ)
         function deltaOk(o, n) {
-          return (n - o) >= 0 && (n - o) <= 1;
+          return (n - o) >= -1 && (n - o) <= 1;
         }
       }
 
       // 1 ผู้ใช้ react ได้ครั้งเดียวต่อข้อความ (uid = doc id)
+      // create = vote ใหม่, update = เปลี่ยน type, delete = ถอน/adminClear
       match /messages/{msgId}/reactions/{uid} {
         allow read: if true;
-        allow create: if isSignedIn()
+        allow create, update: if isSignedIn()
                       && uid == request.auth.uid
                       && request.resource.data.type in ['like','love','clap'];
-        allow delete: if isSignedIn() && uid == request.auth.uid;
+        // เจ้าของถอน vote ได้, admin ลบได้ตอน adminClear
+        allow delete: if isSignedIn()
+                      && (uid == request.auth.uid || isAdmin());
       }
 
       // Report: 1 คน report ได้ครั้งเดียวต่อข้อความ (uid = doc id)
-      // admin อ่านได้ทั้งหมด, สร้างได้เฉพาะ uid ตัวเอง, ลบไม่ได้ (audit trail)
+      // admin อ่าน+ลบได้ (สำหรับ adminClear), user ทั่วไปลบไม่ได้
       match /messages/{msgId}/reports/{uid} {
         allow read: if isAdmin();
         allow create: if isSignedIn()
@@ -102,7 +108,8 @@ service cloud.firestore {
                       && request.resource.data.keys().hasOnly(['reportedAt','reporterUid'])
                       && request.resource.data.reporterUid == request.auth.uid
                       && request.resource.data.reportedAt == request.time;
-        allow update, delete: if false;
+        allow update: if false;
+        allow delete: if isAdmin();
       }
 
       // best-effort slow-mode (ดู residual risk ด้านบน)

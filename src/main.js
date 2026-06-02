@@ -22,6 +22,9 @@ import { toast, updateCharCount } from './ui.js';
 import { avatarColor, initialOf } from './utils.js';
 import { initMonitoring, captureError } from './monitoring.js';
 
+const STORAGE_NAME_KEY = 'lc-name';
+
+// เข้าร่วมห้องและบันทึกชื่อลง localStorage
 function joinLive() {
   const name = nameInput.value.trim();
   if (!name) return nameInput.focus();
@@ -34,12 +37,29 @@ function joinLive() {
   state.myColor = avatarColor(state.myName);
   state.joined = true;
 
+  localStorage.setItem(STORAGE_NAME_KEY, state.myName);
+
   selfInitial.textContent = initialOf(state.myName);
   selfInitial.parentElement.style.background = state.myColor;
   modalOverlay.classList.add('hidden');
 
   renderSystem(`คุณ (${state.myName}) เข้าร่วมแล้ว`);
   startPresence();
+  commentInput.focus();
+}
+
+// เข้าร่วมอัตโนมัติจากชื่อที่บันทึกไว้ (refresh / กลับมาครั้งหลัง)
+function autoRejoin(name) {
+  state.myName = name.slice(0, 20);
+  state.myColor = avatarColor(state.myName);
+  state.joined = true;
+
+  selfInitial.textContent = initialOf(state.myName);
+  selfInitial.parentElement.style.background = state.myColor;
+  modalOverlay.classList.add('hidden');
+
+  startPresence();
+  toast(`ยินดีต้อนรับกลับ ${state.myName} 👋`);
   commentInput.focus();
 }
 
@@ -81,12 +101,24 @@ async function boot() {
   const open = await gateByRoomStatus();
   if (!open) return;
 
-  nameInput.focus();
+  // pre-fill ชื่อที่เคยใช้ (ช่วย UX ทั้ง auto-rejoin และการแก้ชื่อเอง)
+  const savedName = localStorage.getItem(STORAGE_NAME_KEY);
+  if (savedName) {
+    nameInput.value = savedName;
+  } else {
+    nameInput.focus();
+  }
 
   onAuthStateChanged(auth, (user) => {
     if (user) {
       state.uid = user.uid;
       startMessageStream(); // public read เริ่มได้เมื่อมี auth
+
+      // auto-rejoin ถ้ามีชื่อเก่าบันทึกไว้
+      const saved = localStorage.getItem(STORAGE_NAME_KEY);
+      if (saved && !state.joined) {
+        autoRejoin(saved);
+      }
     }
   });
 

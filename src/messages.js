@@ -3,13 +3,12 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   onSnapshot,
   query,
   orderBy,
-  where,
-  limit,
+  limitToLast,
   writeBatch,
+  runTransaction,
   increment,
   serverTimestamp,
   Timestamp,
@@ -28,6 +27,7 @@ import {
   renderMessage,
   removeMessage,
   updateReactions,
+  applyOptimisticReaction,
   messageEls,
 } from './render.js';
 import { scrollToBottom, toast, updateCharCount } from './ui.js';
@@ -38,28 +38,88 @@ function messagesCol() {
   return collection(db, `rooms/${ROOM_ID}/messages`);
 }
 
-// ─── Reactions: atomic, 1 ครั้ง/คน/ข้อความ (H1 + H2) ────────────
+// ─── Reactions: toggle + atomic + optimistic ─────────────────────
+// กดซ้ำ type เดิม = ถอน, กด type อื่น = สลับ, ใหม่ = สร้าง
+// runTransaction กัน race, pendingReactions กัน double-click,
+// optimistic UI ตอบสนองทันที + rollback ถ้า fail
 export async function react(msgId, type) {
   if (!state.uid) return;
+  if (state.pendingReactions.has(msgId)) return;
+
+  const prevType = state.myReactions.get(msgId) || null;
+  // toggle off ถ้ากด type เดิม, else สลับ/สร้าง
+  const newType = prevType === type ? null : type;
+
+  // 1) Optimistic update DOM + state ทันที (สลับ active, ปรับ count)
+  applyOptimisticReaction(msgId, prevType, newType);
+  if (newType) floatEmoji(newType);
+
+  state.pendingReactions.add(msgId);
+
   const reactionRef = doc(
     db,
     `rooms/${ROOM_ID}/messages/${msgId}/reactions/${state.uid}`
   );
+  const msgRef = doc(db, `rooms/${ROOM_ID}/messages/${msgId}`);
+
   try {
-    const existing = await getDoc(reactionRef); // อ่าน 1 doc (ไม่ใช่ทั้ง collection)
-    if (existing.exists()) {
-      toast('คุณโหวตข้อความนี้แล้ว');
-      return;
-    }
-    const batch = writeBatch(db);
-    batch.set(reactionRef, { type, createdAt: serverTimestamp() });
-    batch.update(doc(db, `rooms/${ROOM_ID}/messages/${msgId}`), {
-      [`reactionCounts.${type}`]: increment(1), // atomic
+    // 2) Transaction — read + write atomic (กัน race ระหว่าง 2 tabs/click ซ้อน)
+    await runTransaction(db, async (tx) => {
+      const reactSnap = await tx.get(reactionRef);
+      const msgSnap = await tx.get(msgRef);
+      if (!msgSnap.exists()) throw new Error('message-gone');
+
+      const serverType = reactSnap.exists() ? reactSnap.data().type : null;
+      if (serverType === newType) return; // no-op (server ตรงกับที่ user คาด)
+
+      if (serverType === null) {
+        tx.set(reactionRef, { type: newType, createdAt: serverTimestamp() });
+        tx.update(msgRef, { [`reactionCounts.${newType}`]: increment(1) });
+      } else if (newType === null) {
+        tx.delete(reactionRef);
+        tx.update(msgRef, {
+          [`reactionCounts.${serverType}`]: increment(-1),
+        });
+      } else {
+        tx.set(reactionRef, { type: newType, createdAt: serverTimestamp() });
+        tx.update(msgRef, {
+          [`reactionCounts.${serverType}`]: increment(-1),
+          [`reactionCounts.${newType}`]: increment(1),
+        });
+      }
     });
-    await batch.commit();
-    floatEmoji(type);
   } catch (err) {
+    // 3) Rollback optimistic ถ้าพัง
+    applyOptimisticReaction(msgId, newType, prevType);
+    if (err.message === 'message-gone') {
+      toast('ข้อความนี้ถูกลบแล้ว');
+    } else if (err?.code === 'permission-denied') {
+      toast('ไม่มีสิทธิ์โหวต');
+    } else {
+      toast('โหวตไม่สำเร็จ ลองใหม่');
+    }
     console.error('react failed', err);
+  } finally {
+    state.pendingReactions.delete(msgId);
+  }
+}
+
+// โหลด own reactions ของ msg ที่กำลังแสดง — ให้ UI รู้ว่าตัวเองเคย vote อะไร
+async function loadOwnReactions(msgIds) {
+  if (!state.uid || !msgIds.length) return;
+  try {
+    const snaps = await Promise.all(
+      msgIds.map((id) =>
+        getDoc(
+          doc(db, `rooms/${ROOM_ID}/messages/${id}/reactions/${state.uid}`)
+        )
+      )
+    );
+    snaps.forEach((snap, i) => {
+      if (snap.exists()) state.myReactions.set(msgIds[i], snap.data().type);
+    });
+  } catch (err) {
+    console.warn('load own reactions failed', err);
   }
 }
 
@@ -73,50 +133,52 @@ function floatEmoji(type) {
   el.addEventListener('animationend', () => el.remove());
 }
 
-// ─── Read: pagination + live boundary (H4) ──────────────────────
-export async function startMessageStream() {
+// ─── Read: single onSnapshot ครอบทุก message ที่แสดงอยู่ ──────────
+// ใช้ limitToLast แทน getDocs+boundary เพื่อให้ modified (reaction)
+// บน message เก่า sync ได้ด้วย ไม่แค่ message ใหม่
+export function startMessageStream() {
   if (state.messageStreamStarted) return;
   state.messageStreamStarted = true;
 
   const col = messagesCol();
-  let boundary = Timestamp.now();
-
-  try {
-    const snap = await getDocs(
-      query(col, orderBy('createdAt', 'desc'), limit(INITIAL_LIMIT))
-    );
-    const docsAsc = snap.docs.reverse();
-    docsAsc.forEach((d) =>
-      renderMessage(d.id, d.data(), { onReact: react, onReport: reportMessage })
-    );
-    if (docsAsc.length) {
-      const newest = docsAsc[docsAsc.length - 1].data().createdAt;
-      if (newest) boundary = newest;
-    }
-    scrollToBottom();
-  } catch (err) {
-    console.error('initial load failed', err);
-  }
+  let firstSnapshot = true;
 
   state.unsubMessages = onSnapshot(
-    query(col, where('createdAt', '>', boundary), orderBy('createdAt', 'asc')),
+    query(col, orderBy('createdAt', 'asc'), limitToLast(INITIAL_LIMIT)),
     (snap) => {
+      const isInitial = firstSnapshot;
+      firstSnapshot = false;
+
       snap.docChanges().forEach((change) => {
         const id = change.doc.id;
         const data = change.doc.data();
         if (change.type === 'added') {
+          // initial batch ไม่ scroll ทีละใบ — รอ scrollToBottom() ท้าย
           renderMessage(id, data, {
             onReact: react,
             onReport: reportMessage,
-            scroll: true,
+            scroll: !isInitial,
           });
         } else if (change.type === 'modified') {
+          // reaction/status เปลี่ยน — sync ทุก user ที่เปิดอยู่
           const el = messageEls.get(id);
           if (el) updateReactions(el, data.reactionCounts);
         } else if (change.type === 'removed') {
           removeMessage(id);
         }
       });
+
+      if (isInitial) {
+        scrollToBottom();
+        // โหลด own reactions เฉพาะ 10 ข้อความล่าสุด (ประหยัด reads)
+        const msgIds = snap.docs.slice(-10).map((d) => d.id);
+        loadOwnReactions(msgIds).then(() => {
+          snap.docs.forEach((d) => {
+            const card = messageEls.get(d.id);
+            if (card) updateReactions(card, d.data().reactionCounts || {});
+          });
+        });
+      }
     },
     (err) => console.error('stream error', err)
   );
@@ -147,7 +209,9 @@ export async function sendComment() {
       status: 'visible',
       createdAt: serverTimestamp(), // เวลา server (M3)
       reactionCounts: { like: 0, love: 0, clap: 0 },
-      expireAt: Timestamp.fromMillis(Date.now() + MSG_TTL_MS), // TTL (H5)
+      // TTL: client clock + 5 min buffer กัน drift เล็กน้อย
+      // server validate ว่า expireAt อยู่ใน (now, now+2d) ใน rules
+      expireAt: Timestamp.fromMillis(Date.now() + MSG_TTL_MS + 5 * 60_000),
     });
     batch.set(doc(db, `rooms/${ROOM_ID}/rateLimits/${state.uid}`), {
       nextAllowed: Timestamp.fromMillis(Date.now() + SLOW_MODE_MS),

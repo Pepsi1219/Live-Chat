@@ -10,11 +10,11 @@
   <!-- Content Security Policy (M5) — Firebase bundled local, no scripts from gstatic -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self';
+    script-src 'self' https://browser.sentry-cdn.com;
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src https://fonts.gstatic.com;
     img-src 'self' data: blob:;
-    connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.google.com https://www.gstatic.com;
+    connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.google.com https://www.gstatic.com https://*.sentry.io https://sentry.io;
     manifest-src 'self';
     worker-src 'self';
     base-uri 'self';

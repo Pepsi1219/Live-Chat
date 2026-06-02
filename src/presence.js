@@ -12,6 +12,9 @@ import { ROOM_ID } from './config.js';
 import { state } from './state.js';
 import { viewerEl } from './dom.js';
 
+// เก็บ reference ไว้ remove ได้ — กัน listener ซ้อน ถ้า startPresence ถูกเรียกซ้ำ
+let _visibilityHandler = null;
+
 export function startPresence() {
   const myStatusRef = ref(rtdb, `status/${ROOM_ID}/${state.uid}`);
 
@@ -34,7 +37,11 @@ export function startPresence() {
     viewerEl.textContent = String(count);
   });
 
-  document.addEventListener('visibilitychange', () => {
+  // cleanup handler เก่าก่อนลงทะเบียนใหม่
+  if (_visibilityHandler) {
+    document.removeEventListener('visibilitychange', _visibilityHandler);
+  }
+  _visibilityHandler = () => {
     if (document.visibilityState === 'hidden') {
       rtdbRemove(myStatusRef);
     } else {
@@ -44,5 +51,6 @@ export function startPresence() {
         lastSeen: rtdbNow(),
       });
     }
-  });
+  };
+  document.addEventListener('visibilitychange', _visibilityHandler);
 }

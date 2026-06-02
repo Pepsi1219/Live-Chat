@@ -33,7 +33,10 @@ jobs:
           VITE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_SITE_KEY }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
 
-      - name: Deploy Firestore rules + Hosting
+      - name: Deploy Firestore + RTDB rules
+        run: npx firebase-tools deploy --only firestore:rules,database --project ${{ secrets.VITE_FIREBASE_PROJECT_ID }} --token ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Deploy Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
